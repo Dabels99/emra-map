@@ -65,6 +65,44 @@
         .info-popup strong {
             font-size: 14px;
         }
+
+        /* Town label styling */
+        .town-label {
+            background: none;
+            border: none;
+            font-weight: 700;
+            font-size: 12px;
+            color: #1a1a1a;
+            text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 -1px 0 #fff, 0 1px 0 #fff, -1px 0 0 #fff, 1px 0 0 #fff;
+            white-space: nowrap;
+        }
+        .town-label-growth {
+            font-size: 13px;
+            color: #c0392b;
+            font-weight: 800;
+            text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 -1px 0 #fff, 0 1px 0 #fff, -1px 0 0 #fff, 1px 0 0 #fff;
+        }
+        .town-label-dublin {
+            font-size: 14px;
+            color: #c0392b;
+            font-weight: 900;
+            text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 -1px 0 #fff, 0 1px 0 #fff, -1px 0 0 #fff, 1px 0 0 #fff;
+        }
+        .county-label {
+            background: none;
+            border: none;
+            font-weight: 600;
+            font-size: 13px;
+            color: #555;
+            text-shadow: -1px -1px 0 rgba(255,255,255,0.7), 1px -1px 0 rgba(255,255,255,0.7), -1px 1px 0 rgba(255,255,255,0.7), 1px 1px 0 rgba(255,255,255,0.7);
+            white-space: nowrap;
+            font-style: italic;
+        }
+
+        /* Layer control styling */
+        .leaflet-control-layers {
+            font-size: 13px;
+        }
     </style>
 </head>
 <body>
@@ -78,21 +116,14 @@
     <script>
         // EMRA region classification
         const DUBLIN_METRO = ['DUBLIN'];
+        const CORE_REGION = ['MEATH', 'KILDARE', 'WICKLOW', 'LOUTH'];
+        const GATEWAY_REGION = ['WESTMEATH', 'OFFALY', 'LAOIS', 'LONGFORD'];
 
-        const CORE_REGION = [
-            'MEATH', 'KILDARE', 'WICKLOW', 'LOUTH'
-        ];
-
-        const GATEWAY_REGION = [
-            'WESTMEATH', 'OFFALY', 'LAOIS', 'LONGFORD'
-        ];
-
-        // Colors matching the reference map
         const COLORS = {
-            dublinMetro: '#E8913A',   // Orange
-            coreRegion:  '#1B8A7A',   // Teal/dark cyan
-            gateway:     '#6EC4A8',   // Lighter green
-            outside:     '#E8E8E0',   // Light grey for non-EMRA
+            dublinMetro: '#E8913A',
+            coreRegion:  '#1B8A7A',
+            gateway:     '#6EC4A8',
+            outside:     '#E8E8E0',
         };
 
         function getRegion(county) {
@@ -103,9 +134,7 @@
             return 'outside';
         }
 
-        function getColor(county) {
-            return COLORS[getRegion(county)];
-        }
+        function getColor(county) { return COLORS[getRegion(county)]; }
 
         function getRegionLabel(county) {
             const labels = {
@@ -130,11 +159,7 @@
 
         function highlightFeature(e) {
             const layer = e.target;
-            layer.setStyle({
-                weight: 2.5,
-                color: '#333',
-                fillOpacity: 0.9
-            });
+            layer.setStyle({ weight: 2.5, color: '#333', fillOpacity: 0.9 });
             layer.bringToFront();
         }
 
@@ -157,20 +182,129 @@
             });
         }
 
-        // Initialize map centered on Ireland
+        // ---- Basemaps ----
+        const lightMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 18
+        });
+
+        const osmMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 18
+        });
+
+        const detailedMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 18
+        });
+
+        // ---- Map ----
         const map = L.map('map', {
             center: [53.5, -7.5],
             zoom: 7,
-            zoomControl: true
+            zoomControl: true,
+            layers: [lightMap]
         });
 
-        // Light basemap
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
-            maxZoom: 18
-        }).addTo(map);
+        // ---- Key Towns from RSES ----
+        const towns = [
+            // Dublin City
+            { name: 'Dublin City', lat: 53.3498, lng: -6.2603, type: 'dublin' },
+            // Regional Growth Centres
+            { name: 'Athlone', lat: 53.4239, lng: -7.9407, type: 'growth' },
+            { name: 'Dundalk', lat: 54.0037, lng: -6.4016, type: 'growth' },
+            { name: 'Drogheda', lat: 53.7179, lng: -6.3561, type: 'growth' },
+            // Key Towns - Metropolitan
+            { name: 'Swords', lat: 53.4597, lng: -6.2181, type: 'key' },
+            { name: 'Maynooth', lat: 53.3813, lng: -6.5918, type: 'key' },
+            { name: 'Bray', lat: 53.2009, lng: -6.0985, type: 'key' },
+            // Key Towns - Core
+            { name: 'Navan', lat: 53.6528, lng: -6.6814, type: 'key' },
+            { name: 'Naas', lat: 53.2159, lng: -6.6599, type: 'key' },
+            { name: 'Wicklow', lat: 52.9809, lng: -6.0444, type: 'key' },
+            // Key Towns - Gateway
+            { name: 'Mullingar', lat: 53.5261, lng: -7.3394, type: 'key' },
+            { name: 'Tullamore', lat: 53.2743, lng: -7.4892, type: 'key' },
+            { name: 'Portlaoise', lat: 53.0349, lng: -7.5494, type: 'key' },
+            { name: 'Longford', lat: 53.7274, lng: -7.7933, type: 'key' },
+            { name: 'Graiguecullen\n(Carlow)', lat: 52.8341, lng: -6.9260, type: 'key' },
+        ];
 
-        // Load GeoJSON
+        // Town markers + labels layer
+        const townLabelsGroup = L.layerGroup();
+        towns.forEach(t => {
+            // Circle marker
+            const color = t.type === 'dublin' ? '#c0392b' : t.type === 'growth' ? '#2c3e50' : '#e67e22';
+            const radius = t.type === 'dublin' ? 8 : t.type === 'growth' ? 6 : 5;
+
+            L.circleMarker([t.lat, t.lng], {
+                radius: radius,
+                fillColor: color,
+                color: '#fff',
+                weight: 2,
+                fillOpacity: 0.9
+            }).bindPopup(`<strong>${t.name}</strong><br>${
+                t.type === 'dublin' ? 'Dublin City & Suburbs' :
+                t.type === 'growth' ? 'Regional Growth Centre' : 'Key Town'
+            }`).addTo(townLabelsGroup);
+
+            // Text label
+            const cssClass = t.type === 'dublin' ? 'town-label-dublin' :
+                             t.type === 'growth' ? 'town-label-growth' : 'town-label';
+            L.marker([t.lat, t.lng], {
+                icon: L.divIcon({
+                    className: cssClass,
+                    html: t.name.replace('\n', '<br>'),
+                    iconSize: [100, 20],
+                    iconAnchor: [-8, 10]
+                }),
+                interactive: false
+            }).addTo(townLabelsGroup);
+        });
+
+        // County name labels layer
+        const countyLabelsGroup = L.layerGroup();
+        const countyPositions = [
+            { name: 'Dublin', lat: 53.35, lng: -6.35 },
+            { name: 'Meath', lat: 53.60, lng: -6.65 },
+            { name: 'Kildare', lat: 53.20, lng: -6.85 },
+            { name: 'Wicklow', lat: 52.95, lng: -6.25 },
+            { name: 'Louth', lat: 53.88, lng: -6.48 },
+            { name: 'Westmeath', lat: 53.50, lng: -7.45 },
+            { name: 'Offaly', lat: 53.20, lng: -7.60 },
+            { name: 'Laois', lat: 53.00, lng: -7.55 },
+            { name: 'Longford', lat: 53.72, lng: -7.85 },
+            { name: 'Cavan', lat: 53.95, lng: -7.30 },
+            { name: 'Monaghan', lat: 54.15, lng: -6.95 },
+            { name: 'Roscommon', lat: 53.65, lng: -8.20 },
+            { name: 'Galway', lat: 53.35, lng: -8.60 },
+            { name: 'Tipperary', lat: 52.65, lng: -7.85 },
+            { name: 'Kilkenny', lat: 52.65, lng: -7.25 },
+            { name: 'Carlow', lat: 52.78, lng: -6.85 },
+            { name: 'Wexford', lat: 52.55, lng: -6.55 },
+            { name: 'Waterford', lat: 52.30, lng: -7.10 },
+            { name: 'Cork', lat: 51.90, lng: -8.50 },
+            { name: 'Kerry', lat: 52.05, lng: -9.75 },
+            { name: 'Limerick', lat: 52.60, lng: -8.65 },
+            { name: 'Clare', lat: 52.80, lng: -8.95 },
+            { name: 'Mayo', lat: 53.80, lng: -9.50 },
+            { name: 'Sligo', lat: 54.20, lng: -8.50 },
+            { name: 'Leitrim', lat: 54.15, lng: -8.00 },
+            { name: 'Donegal', lat: 54.85, lng: -7.95 },
+        ];
+        countyPositions.forEach(c => {
+            L.marker([c.lat, c.lng], {
+                icon: L.divIcon({
+                    className: 'county-label',
+                    html: c.name,
+                    iconSize: [80, 20],
+                    iconAnchor: [40, 10]
+                }),
+                interactive: false
+            }).addTo(countyLabelsGroup);
+        });
+
+        // ---- Load GeoJSON ----
         let geojsonLayer;
 
         fetch('lea_simplified.geojson')
@@ -181,13 +315,34 @@
                     onEachFeature: onEachFeature
                 }).addTo(map);
 
-                // Fit to EMRA region bounds
+                // Add town labels by default
+                townLabelsGroup.addTo(map);
+
+                // Fit to EMRA region
                 const emraFeatures = data.features.filter(f => getRegion(f.properties.COUNTY) !== 'outside');
                 const emraLayer = L.geoJSON({ type: 'FeatureCollection', features: emraFeatures });
                 map.fitBounds(emraLayer.getBounds().pad(0.1));
+
+                // ---- Layer Control (toggle on/off) ----
+                const baseMaps = {
+                    "Clean (minimal labels)": lightMap,
+                    "Detailed (all town names)": detailedMap,
+                    "OpenStreetMap (full detail)": osmMap
+                };
+
+                const overlays = {
+                    "EMRA Region Colors": geojsonLayer,
+                    "Key Towns & Growth Centres": townLabelsGroup,
+                    "County Names": countyLabelsGroup
+                };
+
+                L.control.layers(baseMaps, overlays, {
+                    position: 'topright',
+                    collapsed: false
+                }).addTo(map);
             });
 
-        // Legend
+        // ---- Legend ----
         const legend = L.control({ position: 'bottomleft' });
         legend.onAdd = function () {
             const div = L.DomUtil.create('div', 'legend');
@@ -208,6 +363,19 @@
                 <div class="legend-item">
                     <div class="legend-color" style="background:${COLORS.outside}"></div>
                     Outside EMRA
+                </div>
+                <hr style="margin:6px 0;border-color:#ddd">
+                <div class="legend-item">
+                    <div style="width:12px;height:12px;border-radius:50%;background:#c0392b;flex-shrink:0"></div>
+                    Dublin City & Suburbs
+                </div>
+                <div class="legend-item">
+                    <div style="width:10px;height:10px;border-radius:50%;background:#2c3e50;flex-shrink:0"></div>
+                    Regional Growth Centre
+                </div>
+                <div class="legend-item">
+                    <div style="width:8px;height:8px;border-radius:50%;background:#e67e22;flex-shrink:0"></div>
+                    Key Town
                 </div>
             `;
             return div;
