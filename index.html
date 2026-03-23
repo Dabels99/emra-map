@@ -305,8 +305,12 @@
             { name: 'Graiguecullen\n(Carlow)', lat: 52.8341, lng: -6.9260, type: 'key' },
         ];
 
-        const townLabelsGroup = L.layerGroup();
-        towns.forEach(t => {
+        // Split towns into separate toggleable groups
+        const dublinCityGroup = L.layerGroup();
+        const growthCentresGroup = L.layerGroup();
+        const keyTownsGroup = L.layerGroup();
+
+        function addTownToGroup(t, group) {
             const color = t.type === 'dublin' ? '#c0392b' : t.type === 'growth' ? '#2c3e50' : '#e67e22';
             const radius = t.type === 'dublin' ? 8 : t.type === 'growth' ? 6 : 5;
 
@@ -319,7 +323,7 @@
             }).bindPopup(`<strong>${t.name.replace('\n', ' ')}</strong><br>${
                 t.type === 'dublin' ? 'Dublin City & Suburbs' :
                 t.type === 'growth' ? 'Regional Growth Centre' : 'Key Town'
-            }`).addTo(townLabelsGroup);
+            }`).addTo(group);
 
             const cssClass = t.type === 'dublin' ? 'town-label-dublin' :
                              t.type === 'growth' ? 'town-label-growth' : 'town-label';
@@ -331,7 +335,13 @@
                     iconAnchor: [-8, 10]
                 }),
                 interactive: false
-            }).addTo(townLabelsGroup);
+            }).addTo(group);
+        }
+
+        towns.forEach(t => {
+            if (t.type === 'dublin') addTownToGroup(t, dublinCityGroup);
+            else if (t.type === 'growth') addTownToGroup(t, growthCentresGroup);
+            else addTownToGroup(t, keyTownsGroup);
         });
 
         // County name labels
@@ -379,15 +389,44 @@
         // ---- Load GeoJSON ----
         let geojsonLayer;
 
+        // Separate layer groups for each region
+        const dublinMetroLayer = L.layerGroup();
+        const coreRegionLayer = L.layerGroup();
+        const gatewayRegionLayer = L.layerGroup();
+        const outsideEmraLayer = L.layerGroup();
+
         fetch('lea_simplified.geojson')
             .then(r => r.json())
             .then(data => {
+                // Full layer for resetStyle reference
                 geojsonLayer = L.geoJSON(data, {
                     style: style,
                     onEachFeature: onEachFeature
-                }).addTo(map);
+                });
 
-                townLabelsGroup.addTo(map);
+                // Sort features into region layers
+                data.features.forEach(f => {
+                    const region = getRegion(f.properties.COUNTY, f.properties.ENGLISH);
+                    const layer = L.geoJSON(f, {
+                        style: style,
+                        onEachFeature: onEachFeature
+                    });
+                    switch (region) {
+                        case 'dublinMetro': layer.addTo(dublinMetroLayer); break;
+                        case 'coreRegion': layer.addTo(coreRegionLayer); break;
+                        case 'gateway': layer.addTo(gatewayRegionLayer); break;
+                        default: layer.addTo(outsideEmraLayer); break;
+                    }
+                });
+
+                // Add all layers by default
+                dublinMetroLayer.addTo(map);
+                coreRegionLayer.addTo(map);
+                gatewayRegionLayer.addTo(map);
+                outsideEmraLayer.addTo(map);
+                dublinCityGroup.addTo(map);
+                growthCentresGroup.addTo(map);
+                keyTownsGroup.addTo(map);
 
                 // Fit to EMRA region
                 const emraFeatures = data.features.filter(f => getRegion(f.properties.COUNTY, f.properties.ENGLISH) !== 'outside');
@@ -403,9 +442,14 @@
                 };
 
                 const overlays = {
-                    "EMRA Region Colors": geojsonLayer,
-                    "Key Towns & Growth Centres": townLabelsGroup,
-                    "County Names": countyLabelsGroup
+                    [`<span style="color:${COLORS.dublinMetro};font-weight:700">&#9632;</span> Dublin Metropolitan Area`]: dublinMetroLayer,
+                    [`<span style="color:${COLORS.coreRegion};font-weight:700">&#9632;</span> Core Region`]: coreRegionLayer,
+                    [`<span style="color:${COLORS.gateway};font-weight:700">&#9632;</span> Gateway Region`]: gatewayRegionLayer,
+                    [`<span style="color:#bbb;font-weight:700">&#9632;</span> Outside EMRA`]: outsideEmraLayer,
+                    [`<span style="color:#c0392b;font-weight:700">&#9679;</span> Dublin City`]: dublinCityGroup,
+                    [`<span style="color:#2c3e50;font-weight:700">&#9679;</span> Regional Growth Centres`]: growthCentresGroup,
+                    [`<span style="color:#e67e22;font-weight:700">&#9679;</span> Key Towns`]: keyTownsGroup,
+                    [`<span style="color:#555;font-style:italic">A</span> County Names`]: countyLabelsGroup
                 };
 
                 L.control.layers(baseMaps, overlays, {
@@ -423,40 +467,16 @@
             filename: 'EMRA-Growth-Strategy-Map'
         }).addTo(map);
 
-        // ---- Legend ----
+        // ---- Source attribution ----
         const legend = L.control({ position: 'bottomleft' });
         legend.onAdd = function () {
             const div = L.DomUtil.create('div', 'legend');
             div.innerHTML = `
-                <h4>Map Legend</h4>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:${COLORS.dublinMetro}"></div>
-                    Dublin Metropolitan Area
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:${COLORS.coreRegion}"></div>
-                    Core Region
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:${COLORS.gateway}"></div>
-                    Gateway Region
-                </div>
-                <div class="legend-item">
-                    <div class="legend-color" style="background:${COLORS.outside}"></div>
-                    Outside EMRA
-                </div>
-                <hr style="margin:6px 0;border-color:#ddd">
-                <div class="legend-item">
-                    <div style="width:12px;height:12px;border-radius:50%;background:#c0392b;flex-shrink:0"></div>
-                    Dublin City & Suburbs
-                </div>
-                <div class="legend-item">
-                    <div style="width:10px;height:10px;border-radius:50%;background:#2c3e50;flex-shrink:0"></div>
-                    Regional Growth Centre
-                </div>
-                <div class="legend-item">
-                    <div style="width:8px;height:8px;border-radius:50%;background:#e67e22;flex-shrink:0"></div>
-                    Key Town
+                <h4>EMRA RSES 2019-2031</h4>
+                <div style="font-size:11px;color:#666">
+                    Source: Eastern & Midland<br>Regional Assembly<br>
+                    Data: OSi / CSO Census 2016<br>
+                    LEA Boundaries: data.gov.ie
                 </div>
             `;
             return div;
