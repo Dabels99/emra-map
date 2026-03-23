@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EMRA Growth Strategy - Strategic Connections</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; }
+        #map { width: 100%; height: 100vh; }
+
+        .legend {
+            background: white;
+            padding: 14px 18px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+            line-height: 1.8;
+            font-size: 13px;
+            max-width: 240px;
+        }
+        .legend h4 {
+            margin-bottom: 8px;
+            font-size: 15px;
+            color: #333;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 14px;
+            border: 1px solid #999;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .title-banner {
+            position: absolute;
+            top: 10px;
+            left: 60px;
+            z-index: 1000;
+            background: rgba(255,255,255,0.92);
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .title-banner h1 {
+            font-size: 18px;
+            color: #1a3a5c;
+            margin: 0;
+        }
+        .title-banner p {
+            font-size: 12px;
+            color: #666;
+            margin: 2px 0 0;
+        }
+
+        .info-popup {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .info-popup strong {
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="title-banner">
+        <h1>EMRA Growth Strategy - Strategic Connections</h1>
+        <p>International and Interregional Connections</p>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // EMRA region classification
+        const DUBLIN_METRO = ['DUBLIN'];
+
+        const CORE_REGION = [
+            'MEATH', 'KILDARE', 'WICKLOW', 'LOUTH'
+        ];
+
+        const GATEWAY_REGION = [
+            'WESTMEATH', 'OFFALY', 'LAOIS', 'LONGFORD'
+        ];
+
+        // Colors matching the reference map
+        const COLORS = {
+            dublinMetro: '#E8913A',   // Orange
+            coreRegion:  '#1B8A7A',   // Teal/dark cyan
+            gateway:     '#6EC4A8',   // Lighter green
+            outside:     '#E8E8E0',   // Light grey for non-EMRA
+        };
+
+        function getRegion(county) {
+            const c = county.toUpperCase();
+            if (DUBLIN_METRO.includes(c)) return 'dublinMetro';
+            if (CORE_REGION.includes(c)) return 'coreRegion';
+            if (GATEWAY_REGION.includes(c)) return 'gateway';
+            return 'outside';
+        }
+
+        function getColor(county) {
+            return COLORS[getRegion(county)];
+        }
+
+        function getRegionLabel(county) {
+            const labels = {
+                dublinMetro: 'Dublin Metropolitan Area',
+                coreRegion: 'Core Region',
+                gateway: 'Gateway Region',
+                outside: 'Outside EMRA'
+            };
+            return labels[getRegion(county)];
+        }
+
+        function style(feature) {
+            const region = getRegion(feature.properties.COUNTY);
+            return {
+                fillColor: getColor(feature.properties.COUNTY),
+                weight: region === 'outside' ? 0.5 : 1,
+                opacity: 1,
+                color: region === 'outside' ? '#ccc' : '#fff',
+                fillOpacity: region === 'outside' ? 0.4 : 0.75
+            };
+        }
+
+        function highlightFeature(e) {
+            const layer = e.target;
+            layer.setStyle({
+                weight: 2.5,
+                color: '#333',
+                fillOpacity: 0.9
+            });
+            layer.bringToFront();
+        }
+
+        function resetHighlight(e) {
+            geojsonLayer.resetStyle(e.target);
+        }
+
+        function onEachFeature(feature, layer) {
+            const p = feature.properties;
+            layer.bindPopup(`
+                <div class="info-popup">
+                    <strong>${p.ENGLISH}</strong><br>
+                    County: ${p.COUNTY}<br>
+                    Region: ${getRegionLabel(p.COUNTY)}
+                </div>
+            `);
+            layer.on({
+                mouseover: highlightFeature,
+                mouseout: resetHighlight
+            });
+        }
+
+        // Initialize map centered on Ireland
+        const map = L.map('map', {
+            center: [53.5, -7.5],
+            zoom: 7,
+            zoomControl: true
+        });
+
+        // Light basemap
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
+            maxZoom: 18
+        }).addTo(map);
+
+        // Load GeoJSON
+        let geojsonLayer;
+
+        fetch('lea_simplified.geojson')
+            .then(r => r.json())
+            .then(data => {
+                geojsonLayer = L.geoJSON(data, {
+                    style: style,
+                    onEachFeature: onEachFeature
+                }).addTo(map);
+
+                // Fit to EMRA region bounds
+                const emraFeatures = data.features.filter(f => getRegion(f.properties.COUNTY) !== 'outside');
+                const emraLayer = L.geoJSON({ type: 'FeatureCollection', features: emraFeatures });
+                map.fitBounds(emraLayer.getBounds().pad(0.1));
+            });
+
+        // Legend
+        const legend = L.control({ position: 'bottomleft' });
+        legend.onAdd = function () {
+            const div = L.DomUtil.create('div', 'legend');
+            div.innerHTML = `
+                <h4>Map Legend</h4>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:${COLORS.dublinMetro}"></div>
+                    Dublin Metropolitan Area
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:${COLORS.coreRegion}"></div>
+                    Core Region
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:${COLORS.gateway}"></div>
+                    Gateway Region
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background:${COLORS.outside}"></div>
+                    Outside EMRA
+                </div>
+            `;
+            return div;
+        };
+        legend.addTo(map);
+    </script>
+</body>
+</html>
