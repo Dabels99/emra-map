@@ -115,6 +115,16 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         // EMRA region classification
+        // Metro LEAs extend into Kildare, Wicklow and Meath per RSES MASP
+        const METRO_LEAS = [
+            // Kildare metro LEAs
+            'CELBRIDGE LEA-4', 'LEIXLIP LEA-3', 'MAYNOOTH LEA-5', 'CLANE LEA-5',
+            // Wicklow metro LEAs
+            'BRAY EAST LEA-4', 'BRAY WEST LEA-4', 'GREYSTONES LEA-6',
+            // Meath metro LEAs
+            'RATOATH LEA-7', 'ASHBOURNE LEA-6', 'LAYTOWN  BETTYSTOWN-LEA-7'
+        ];
+
         const DUBLIN_METRO = ['DUBLIN'];
         const CORE_REGION = ['MEATH', 'KILDARE', 'WICKLOW', 'LOUTH'];
         const GATEWAY_REGION = ['WESTMEATH', 'OFFALY', 'LAOIS', 'LONGFORD'];
@@ -126,30 +136,32 @@
             outside:     '#E8E8E0',
         };
 
-        function getRegion(county) {
+        function getRegion(county, leaName) {
             const c = county.toUpperCase();
+            // Check if this specific LEA is in the metro area
+            if (leaName && METRO_LEAS.includes(leaName)) return 'dublinMetro';
             if (DUBLIN_METRO.includes(c)) return 'dublinMetro';
             if (CORE_REGION.includes(c)) return 'coreRegion';
             if (GATEWAY_REGION.includes(c)) return 'gateway';
             return 'outside';
         }
 
-        function getColor(county) { return COLORS[getRegion(county)]; }
+        function getColor(county, leaName) { return COLORS[getRegion(county, leaName)]; }
 
-        function getRegionLabel(county) {
+        function getRegionLabel(county, leaName) {
             const labels = {
                 dublinMetro: 'Dublin Metropolitan Area',
                 coreRegion: 'Core Region',
                 gateway: 'Gateway Region',
                 outside: 'Outside EMRA'
             };
-            return labels[getRegion(county)];
+            return labels[getRegion(county, leaName)];
         }
 
         function style(feature) {
-            const region = getRegion(feature.properties.COUNTY);
+            const region = getRegion(feature.properties.COUNTY, feature.properties.ENGLISH);
             return {
-                fillColor: getColor(feature.properties.COUNTY),
+                fillColor: getColor(feature.properties.COUNTY, feature.properties.ENGLISH),
                 weight: region === 'outside' ? 0.5 : 1,
                 opacity: 1,
                 color: region === 'outside' ? '#ccc' : '#fff',
@@ -173,7 +185,7 @@
                 <div class="info-popup">
                     <strong>${p.ENGLISH}</strong><br>
                     County: ${p.COUNTY}<br>
-                    Region: ${getRegionLabel(p.COUNTY)}
+                    Region: ${getRegionLabel(p.COUNTY, p.ENGLISH)}
                 </div>
             `);
             layer.on({
@@ -319,7 +331,7 @@
                 townLabelsGroup.addTo(map);
 
                 // Fit to EMRA region
-                const emraFeatures = data.features.filter(f => getRegion(f.properties.COUNTY) !== 'outside');
+                const emraFeatures = data.features.filter(f => getRegion(f.properties.COUNTY, f.properties.ENGLISH) !== 'outside');
                 const emraLayer = L.geoJSON({ type: 'FeatureCollection', features: emraFeatures });
                 map.fitBounds(emraLayer.getBounds().pad(0.1));
 
