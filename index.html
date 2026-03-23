@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>EMRA Growth Strategy - Strategic Connections</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Fullscreen plugin -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.fullscreen@3.0.2/Control.FullScreen.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; }
@@ -103,6 +105,36 @@
         .leaflet-control-layers {
             font-size: 13px;
         }
+
+        /* Info panel on hover */
+        .info-panel {
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.92);
+            border-radius: 6px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+            font-size: 13px;
+            line-height: 1.5;
+            min-width: 180px;
+        }
+        .info-panel h4 {
+            margin: 0 0 4px;
+            font-size: 14px;
+            color: #1a3a5c;
+        }
+
+        /* Print button */
+        .print-btn {
+            background: white;
+            border: 2px solid rgba(0,0,0,0.2);
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+        }
+        .print-btn:hover {
+            background: #f4f4f4;
+        }
     </style>
 </head>
 <body>
@@ -113,15 +145,15 @@
     <div id="map"></div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Fullscreen plugin -->
+    <script src="https://unpkg.com/leaflet.fullscreen@3.0.2/Control.FullScreen.js"></script>
+    <!-- EasyPrint plugin -->
+    <script src="https://unpkg.com/leaflet-easyprint@2.1.9/dist/bundle.min.js"></script>
     <script>
         // EMRA region classification
-        // Metro LEAs extend into Kildare, Wicklow and Meath per RSES MASP
         const METRO_LEAS = [
-            // Kildare metro LEAs
             'CELBRIDGE LEA-4', 'LEIXLIP LEA-3', 'MAYNOOTH LEA-5',
-            // Wicklow metro LEAs
             'BRAY EAST LEA-4', 'BRAY WEST LEA-4', 'GREYSTONES LEA-6',
-            // Meath metro LEAs
             'RATOATH LEA-7', 'ASHBOURNE LEA-6'
         ];
 
@@ -138,7 +170,6 @@
 
         function getRegion(county, leaName) {
             const c = county.toUpperCase();
-            // Check if this specific LEA is in the metro area
             if (leaName && METRO_LEAS.includes(leaName)) return 'dublinMetro';
             if (DUBLIN_METRO.includes(c)) return 'dublinMetro';
             if (CORE_REGION.includes(c)) return 'coreRegion';
@@ -169,14 +200,74 @@
             };
         }
 
+        // ---- Basemaps ----
+        // OpenFreeMap - beautiful free tiles, no API key
+        const openFreeMapLight = L.tileLayer('https://tiles.openfreemap.org/styles/liberty/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://openfreemap.org">OpenFreeMap</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+            maxZoom: 18
+        });
+
+        const cartoVoyager = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 18
+        });
+
+        const osmMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors',
+            maxZoom: 18
+        });
+
+        const cartoLight = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 18
+        });
+
+        // ---- Map ----
+        const map = L.map('map', {
+            center: [53.5, -7.5],
+            zoom: 7,
+            zoomControl: true,
+            layers: [openFreeMapLight],
+            fullscreenControl: true
+        });
+
+        // ---- Info Panel (hover details) ----
+        const info = L.control({ position: 'topright' });
+        info.onAdd = function () {
+            this._div = L.DomUtil.create('div', 'info-panel');
+            this.update();
+            return this._div;
+        };
+        info.update = function (props) {
+            if (props) {
+                const region = getRegion(props.COUNTY, props.ENGLISH);
+                const regionLabel = getRegionLabel(props.COUNTY, props.ENGLISH);
+                const color = COLORS[region];
+                this._div.innerHTML = `
+                    <h4>${props.ENGLISH}</h4>
+                    <b>County:</b> ${props.COUNTY}<br>
+                    <b>Region:</b> <span style="color:${color};font-weight:700">${regionLabel}</span>
+                `;
+            } else {
+                this._div.innerHTML = '<h4>EMRA Region Info</h4>Hover over an area';
+            }
+        };
+        info.addTo(map);
+
         function highlightFeature(e) {
             const layer = e.target;
             layer.setStyle({ weight: 2.5, color: '#333', fillOpacity: 0.9 });
             layer.bringToFront();
+            info.update(layer.feature.properties);
         }
 
         function resetHighlight(e) {
             geojsonLayer.resetStyle(e.target);
+            info.update();
+        }
+
+        function zoomToFeature(e) {
+            map.fitBounds(e.target.getBounds());
         }
 
         function onEachFeature(feature, layer) {
@@ -190,51 +281,23 @@
             `);
             layer.on({
                 mouseover: highlightFeature,
-                mouseout: resetHighlight
+                mouseout: resetHighlight,
+                click: zoomToFeature
             });
         }
 
-        // ---- Basemaps ----
-        const lightMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap &copy; CARTO',
-            maxZoom: 18
-        });
-
-        const osmMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors',
-            maxZoom: 18
-        });
-
-        const detailedMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; OpenStreetMap &copy; CARTO',
-            maxZoom: 18
-        });
-
-        // ---- Map ----
-        const map = L.map('map', {
-            center: [53.5, -7.5],
-            zoom: 7,
-            zoomControl: true,
-            layers: [lightMap]
-        });
-
         // ---- Key Towns from RSES ----
         const towns = [
-            // Dublin City
             { name: 'Dublin City', lat: 53.3498, lng: -6.2603, type: 'dublin' },
-            // Regional Growth Centres
             { name: 'Athlone', lat: 53.4239, lng: -7.9407, type: 'growth' },
             { name: 'Dundalk', lat: 54.0037, lng: -6.4016, type: 'growth' },
             { name: 'Drogheda', lat: 53.7179, lng: -6.3561, type: 'growth' },
-            // Key Towns - Metropolitan
             { name: 'Swords', lat: 53.4597, lng: -6.2181, type: 'key' },
             { name: 'Maynooth', lat: 53.3813, lng: -6.5918, type: 'key' },
             { name: 'Bray', lat: 53.2009, lng: -6.0985, type: 'key' },
-            // Key Towns - Core
             { name: 'Navan', lat: 53.6528, lng: -6.6814, type: 'key' },
             { name: 'Naas', lat: 53.2159, lng: -6.6599, type: 'key' },
             { name: 'Wicklow', lat: 52.9809, lng: -6.0444, type: 'key' },
-            // Key Towns - Gateway
             { name: 'Mullingar', lat: 53.5261, lng: -7.3394, type: 'key' },
             { name: 'Tullamore', lat: 53.2743, lng: -7.4892, type: 'key' },
             { name: 'Portlaoise', lat: 53.0349, lng: -7.5494, type: 'key' },
@@ -242,10 +305,8 @@
             { name: 'Graiguecullen\n(Carlow)', lat: 52.8341, lng: -6.9260, type: 'key' },
         ];
 
-        // Town markers + labels layer
         const townLabelsGroup = L.layerGroup();
         towns.forEach(t => {
-            // Circle marker
             const color = t.type === 'dublin' ? '#c0392b' : t.type === 'growth' ? '#2c3e50' : '#e67e22';
             const radius = t.type === 'dublin' ? 8 : t.type === 'growth' ? 6 : 5;
 
@@ -255,12 +316,11 @@
                 color: '#fff',
                 weight: 2,
                 fillOpacity: 0.9
-            }).bindPopup(`<strong>${t.name}</strong><br>${
+            }).bindPopup(`<strong>${t.name.replace('\n', ' ')}</strong><br>${
                 t.type === 'dublin' ? 'Dublin City & Suburbs' :
                 t.type === 'growth' ? 'Regional Growth Centre' : 'Key Town'
             }`).addTo(townLabelsGroup);
 
-            // Text label
             const cssClass = t.type === 'dublin' ? 'town-label-dublin' :
                              t.type === 'growth' ? 'town-label-growth' : 'town-label';
             L.marker([t.lat, t.lng], {
@@ -274,7 +334,7 @@
             }).addTo(townLabelsGroup);
         });
 
-        // County name labels layer
+        // County name labels
         const countyLabelsGroup = L.layerGroup();
         const countyPositions = [
             { name: 'Dublin', lat: 53.35, lng: -6.35 },
@@ -327,7 +387,6 @@
                     onEachFeature: onEachFeature
                 }).addTo(map);
 
-                // Add town labels by default
                 townLabelsGroup.addTo(map);
 
                 // Fit to EMRA region
@@ -335,11 +394,12 @@
                 const emraLayer = L.geoJSON({ type: 'FeatureCollection', features: emraFeatures });
                 map.fitBounds(emraLayer.getBounds().pad(0.1));
 
-                // ---- Layer Control (toggle on/off) ----
+                // ---- Layer Control ----
                 const baseMaps = {
-                    "Clean (minimal labels)": lightMap,
-                    "Detailed (all town names)": detailedMap,
-                    "OpenStreetMap (full detail)": osmMap
+                    "OpenFreeMap (clean)": openFreeMapLight,
+                    "Detailed (town names)": cartoVoyager,
+                    "OpenStreetMap (full)": osmMap,
+                    "Minimal (no labels)": cartoLight
                 };
 
                 const overlays = {
@@ -353,6 +413,15 @@
                     collapsed: false
                 }).addTo(map);
             });
+
+        // ---- Print/Export Button ----
+        L.easyPrint({
+            title: 'Export as PNG',
+            position: 'bottomright',
+            sizeModes: ['Current', 'A4Portrait', 'A4Landscape'],
+            exportOnly: true,
+            filename: 'EMRA-Growth-Strategy-Map'
+        }).addTo(map);
 
         // ---- Legend ----
         const legend = L.control({ position: 'bottomleft' });
