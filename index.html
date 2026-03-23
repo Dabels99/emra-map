@@ -7,6 +7,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <!-- Fullscreen plugin -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet.fullscreen@3.0.2/Control.FullScreen.css" />
+    <!-- Geocoder/Search plugin -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Arial, sans-serif; }
@@ -149,6 +151,8 @@
     <script src="https://unpkg.com/leaflet.fullscreen@3.0.2/Control.FullScreen.js"></script>
     <!-- EasyPrint plugin -->
     <script src="https://unpkg.com/leaflet-easyprint@2.1.9/dist/bundle.min.js"></script>
+    <!-- Geocoder/Search plugin -->
+    <script src="https://unpkg.com/leaflet-control-geocoder@2.4.0/dist/Control.Geocoder.js"></script>
     <script>
         // EMRA region classification
         const METRO_LEAS = [
@@ -230,6 +234,21 @@
             layers: [openFreeMapLight],
             fullscreenControl: true
         });
+
+        // ---- Search/Geocoder ----
+        L.Control.geocoder({
+            defaultMarkGeocode: true,
+            position: 'topleft',
+            placeholder: 'Search location...',
+            errorMessage: 'Nothing found.',
+            geocoder: L.Control.Geocoder.nominatim({
+                geocodingQueryParams: {
+                    countrycodes: 'ie',
+                    viewbox: '-10.5,51.4,-5.5,55.5',
+                    bounded: 1
+                }
+            })
+        }).addTo(map);
 
         // ---- Info Panel (hover details) ----
         const info = L.control({ position: 'topright' });
